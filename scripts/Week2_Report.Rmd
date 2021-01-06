@@ -1,0 +1,191 @@
+---
+title: "Milestone Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, fig.align = "center")
+```
+
+```{r include=FALSE}
+library(quanteda)
+library(irlba)
+library(ggplot2)
+library(dplyr)
+library(tidytext)
+library(forcats)
+library(wordcloud)
+set.seed(123)
+options(max.print = 100)
+```
+
+```{r include=FALSE}
+dat <- readLines(".././test/sample.txt")[1:10000]
+profanity <- readLines(".././profanity/profanity.txt")
+```
+
+```{r include=FALSE}
+toke <- tokens(x = dat, 
+               remove_punct = TRUE, 
+               remove_symbols = TRUE, 
+               remove_url = TRUE, 
+               remove_numbers = TRUE, 
+               remove_separators = TRUE)
+
+toke <- tokens_tolower(toke)
+toke <- tokens_select(toke, pattern = stopwords(), selection = "remove")
+toke <- tokens_wordstem(toke)
+toke <- tokens_select(toke, pattern = profanity, selection = "remove")
+dat_tokens <- tokens_ngrams(toke, n = 1:2)
+```
+
+```{r include=FALSE}
+dat_dfm <- dfm(dat_tokens)
+```
+
+# Summary 
+This report consists of a brief exploratory analysis of text data from Twitter, blogs, and news stories. The data was tokenized, profanity words were removed, and a document term frequency matrix (DFM) was created. Data summaries and plots were created from the DFM. Lastly, I summarized my plans for creating a Shiny application text prediction algorithm. 
+
+# Data Summaries
+
+Number of sentences in the first 50 text files and the average number of sentences across all 10,000 text files:
+
+```{r}
+nsentence(dat)[1:50]
+mean(nsentence(dat))
+```
+
+Below is a printout that shows what the document frequency term matrix looks like:
+
+```{r}
+dat_dfm[1:10,]
+```
+
+Most frequent features:
+
+```{r}
+topfeatures(dat_dfm, n = 100, decreasing = T)
+```
+
+Least frequent features:
+
+```{r}
+topfeatures(dat_dfm, n = 50, decreasing = F)
+```
+
+Summary of first 9 text files:
+
+```{r}
+textstat_summary(dat_dfm)[1:10,]
+```
+
+Summary of most frequent features:
+
+```{r}
+textstat_frequency(dat_dfm)[1:10,]
+```
+
+# Exploratory Analysis 
+
+```{r include=FALSE}
+dat_dfm_df <- tidy(dat_dfm)
+colnames(dat_dfm_df)[2] <- "word"
+```
+
+## Word Cloud 
+
+100 most frequent words:
+
+```{r}
+# Word cloud, top words
+dat_dfm_df %>%
+  count(word) %>% 
+  with(wordcloud(word, n, max.words = 100))
+```
+
+## Most Frequent Words 
+
+```{r}
+# Bar chart, top words
+data.frame(word = attributes(topfeatures(dat_dfm, n = 20))$names,
+           count = topfeatures(dat_dfm, n = 20)) %>%
+  mutate(word = fct_reorder(word, desc(count))) %>% 
+  ggplot(aes(word, count)) +
+  geom_col(fill = "mediumseagreen") + 
+  theme_bw() +
+  labs(title = "Top 20 Most Frequent Words") +
+  theme(axis.text.x = element_text(angle = 315),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank())
+```
+
+## Sentiment Analysis 
+
+### Most frequent positive and negative sentiments
+
+```{r}
+## Top positive and negative
+# Bing
+dat_dfm_df %>% 
+  inner_join(get_sentiments("bing")) %>% 
+  count(word, sentiment, sort = TRUE) %>%
+  group_by(sentiment) %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  slice(1:10) %>% 
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(position = "dodge") + 
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(title = "Top 10 Most Frequent Positive and Negative Sentiments") +
+  ylab("Count") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank())
+```
+
+### Most frequent words by sentiment
+
+Top 3 most frequent words using the Afinn sentiment lexicon:
+
+```{r}
+# Top sentiments
+## Afinn
+dat_dfm_df %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  count(word, value, sort = TRUE) %>%
+  group_by(value) %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  slice(1:3) %>% 
+  ggplot(aes(word, n, fill = as.factor(value))) +
+  geom_col(position = "dodge") +
+  labs(title = "Top 3 Most Frequent Words by Sentiment") +
+  ylab("Count") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 315),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank())
+```
+
+Top 3 most frequent words using the Nrc sentiment lexicon:
+
+```{r}
+# Top sentiments
+## Nrc
+  dat_dfm_df %>% 
+    inner_join(get_sentiments("nrc")) %>% 
+    count(word, sentiment, sort = TRUE) %>%
+    mutate(word = fct_reorder(word, n)) %>% 
+    group_by(sentiment) %>% 
+    slice(1:3) %>% 
+    ggplot(aes(word, n, fill = as.factor(sentiment))) +
+    geom_col(position = "dodge", show.legend = F) +
+    facet_wrap(~sentiment, scales = "free_x", nrow = 2) +
+    labs(title = "Top 3 Most Frequent Words by Sentiment") +
+    ylab("Count") +
+    theme_bw() +
+    theme(panel.grid.minor.y = element_blank(),
+          panel.grid.major.x = element_blank(),
+          axis.text.x = element_text(angle = 325))
+```
+
+# Prediction Algorithm 
+For my prediction algorithm, I'll be using the n-gram language model. Simply put, an n-gram is a sequence of n-words. For example, if I were to create a 2-gram model of the text, "You are nice", the 2-gram model would be "you are" and "are nice". Pairing words together like this allows for predictions. If you were to type the word "you", the model in this situation would predict the next word to be "are", because in our training set the word "you" is paired with the word "are". Obviously, though, there will not always be a single pairing of words like this. There will sometimes be hundreds of word pairings; so what do you do in this situation? In this situation, you can predict the next word to be the word pairing *with the highest frequency* in the training set. For example, the word "you" may be paired with the words, "are", "like", "hate", "look", "seem", etc. Whichever of these pairings occurs most frequently will be used for the prediction. If the word you type does not appear in the training data, and thus a word pair will not exist, the model will default to listing the highest frequency words as the predictions. 
