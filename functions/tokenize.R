@@ -1,6 +1,8 @@
 tokenize <- function(text, pattern_remove = NULL) {
  
-   require(quanteda)
+  if (!isNamespaceLoaded("quanteda")) {
+    return(print("quanteda package is not loaded"))
+  }
   
   pattern <- pattern_remove
   
@@ -16,8 +18,6 @@ tokenize <- function(text, pattern_remove = NULL) {
   }
   
   toke <- tokens_tolower(toke)
-  toke <- tokens_select(toke, pattern = stopwords(), selection = "remove")
-  toke <- tokens_wordstem(toke)
-  
+
   return(toke)
 }
